@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>党史知识题库 - 智能刷题系统</title>
+    <style>
+        :root {
+            --primary-red: #DA251D;    
+            --primary-red-hover: #C01D16;
+            --primary-gold: #D4AF37;   
+            --bg-color: #F5F7FA;       
+            --card-bg: #FFFFFF;        
+            --text-main: #2C3E50;      
+            --text-desc: #5C6A79;      
+            --border-color: #E2E8F0;
+            --success-color: #10B981;  /* 答对的绿色 */
+            --error-color: #EF4444;    /* 答错的红色 */
+        }
+
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body { background-color: var(--bg-color); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; }
+
+        /* 左侧答题卡 */
+        .sidebar { width: 300px; background-color: var(--card-bg); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; box-shadow: 2px 0 10px rgba(0,0,0,0.03); z-index: 10; flex-shrink: 0; }
+        .sidebar-header { padding: 20px; border-bottom: 1px solid var(--border-color); text-align: center; }
+        .sidebar-header h2 { font-size: 18px; color: var(--primary-red); margin-bottom: 15px; }
+        .stat-box { display: flex; justify-content: space-around; font-size: 14px; color: var(--text-desc); }
+        .stat-item { display: flex; flex-direction: column; align-items: center; }
+        .stat-value { font-size: 18px; font-weight: bold; margin-top: 5px; color: var(--text-main); }
+        .stat-value.acc { color: var(--success-color); }
+        
+        .question-matrix { flex-grow: 1; overflow-y: auto; padding: 20px; }
+        .matrix-title { font-size: 14px; font-weight: bold; color: var(--text-desc); margin: 15px 0 10px 0; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
+        .matrix-title:first-child { margin-top: 0; }
+        .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+        .grid-item { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-color); border-radius: 6px; font-size: 13px; cursor: pointer; transition: all 0.2s; color: var(--text-desc); }
+        .grid-item:hover { border-color: var(--primary-gold); color: var(--primary-gold); }
+        .grid-item.active { box-shadow: 0 0 0 2px var(--primary-gold); font-weight: bold; }
+        .grid-item.correct { background-color: var(--success-color); border-color: var(--success-color); color: white; }
+        .grid-item.error { background-color: var(--error-color); border-color: var(--error-color); color: white; }
+
+        /* 右侧刷题区 */
+        .main-content { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        .top-nav { padding: 20px 40px; background: white; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .q-type-badge { background-color: rgba(218, 37, 29, 0.1); color: var(--primary-red); padding: 5px 12px; border-radius: 20px; font-size: 14px; font-weight: bold; }
+        
+        .quiz-container { flex-grow: 1; overflow-y: auto; padding: 40px; display: flex; flex-direction: column; align-items: center; scroll-behavior: smooth; }
+        .quiz-card { background: var(--card-bg); width: 100%; max-width: 800px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); padding: 40px; margin-bottom: 30px; }
+        
+        .question { font-size: 18px; line-height: 1.6; font-weight: bold; margin-bottom: 30px; }
+        
+        .options-list { display: flex; flex-direction: column; gap: 15px; }
+        .option { padding: 15px 20px; border: 2px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 16px; display: flex; align-items: center; }
+        .option:hover:not(.disabled) { border-color: var(--primary-gold); background-color: rgba(212, 175, 55, 0.05); }
+        .option.selected { border-color: var(--primary-gold); background-color: rgba(212, 175, 55, 0.1); font-weight: bold; }
+        
+        /* 结果样式 */
+        .option.correct-ans { border-color: var(--success-color); background-color: rgba(16, 185, 129, 0.1); color: #065F46; font-weight: bold; }
+        .option.wrong-ans { border-color: var(--error-color); background-color: rgba(239, 68, 68, 0.1); color: #991B1B; }
+        .option.disabled { cursor: not-allowed; }
+
+        .option-letter { width: 30px; font-weight: bold; color: var(--text-desc); }
+        .option.correct-ans .option-letter, .option.wrong-ans .option-letter { color: inherit; }
+
+        /* 底部操作区 */
+        .actions { margin-top: 30px; display: flex; justify-content: space-between; align-items: center; width: 100%; max-width: 800px; }
+        .btn { padding: 12px 25px; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; transition: all 0.2s; }
+        .btn-outline { background: transparent; border: 2px solid var(--border-color); color: var(--text-desc); }
+        .btn-outline:hover:not(:disabled) { border-color: var(--primary-gold); color: var(--primary-gold); }
+        .btn-primary { background: var(--primary-red); color: white; box-shadow: 0 4px 10px rgba(218, 37, 29, 0.3); }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-red-hover); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* 解析区 */
+        .explanation { margin-top: 25px; padding: 20px; background-color: #F8FAFC; border-left: 4px solid var(--primary-gold); border-radius: 4px; font-size: 15px; color: var(--text-desc); display: none; line-height: 1.6; }
+        .explanation.show { display: block; animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* 移动端适配 */
+        .menu-toggle { display: none; background: var(--primary-red); color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; }
+        @media (max-width: 768px) {
+            .sidebar { position: absolute; left: -300px; height: 100%; transition: left 0.3s z-index: 1000; }
+            .sidebar.open { left: 0; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+            .menu-toggle { display: block; }
+            .top-nav { padding: 15px; }
+            .quiz-container { padding: 20px 15px; }
+            .quiz-card { padding: 25px 20px; }
+            .actions { flex-direction: column; gap: 15px; }
+            .actions .btn { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 左侧答题卡 -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h2>党史刷题系统</h2>
+            <div class="stat-box">
+                <div class="stat-item">
+                    <span>已做</span>
+                    <span class="stat-value" id="statDone">0/108</span>
+                </div>
+                <div class="stat-item">
+                    <span>正确率</span>
+                    <span class="stat-value acc" id="statAcc">0%</span>
+                </div>
+            </div>
+        </div>
+        <div class="question-matrix" id="qMatrix">
+            <!-- 动态生成格子 -->
+        </div>
+    </div>
+
+    <!-- 右侧内容 -->
+    <div class="main-content">
+        <div class="top-nav">
+            <button class="menu-toggle" onclick="toggleSidebar()">☰ 答题卡</button>
+            <div class="q-type-badge" id="qTypeBadge">单选题</div>
+            <div style="font-weight:bold; color:var(--text-desc);" id="qIndexText">1 / 108</div>
+        </div>
+
+        <div class="quiz-container" id="quizContainer">
+            <div class="quiz-card">
+                <div class="question" id="qText">题目加载中...</div>
+                <div class="options-list" id="oList">
+                    <!-- 选项动态生成 -->
+                </div>
+                <div class="explanation" id="expBox"></div>
+            </div>
+
+            <div class="actions">
+                <button class="btn btn-outline" id="btnPrev" onclick="goPrev()">上一题</button>
+                <button class="btn btn-primary" id="btnSubmit" style="display:none;" onclick="submitMulti()">确认提交</button>
+                <button class="btn btn-primary" id="btnNext" onclick="goNext()">下一题</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 压缩构建的108道题库数据
+        // t: 1单选 2判断 3多选 | a: 正确答案索引(数组为多选) | exp: 解析
+        const db = [
+            // ============ 单选题 ============
+            {t:1, q:"1. 1915年9月，陈独秀在上海创办《青年杂志》，后改名___，新文化运动由此发端。", o:["向导","新青年","共产党","每周评论"], a:1},
+            {t:1, q:"2. ___年，俄国十月革命一声炮响，给中国送来了马克思列宁主义。", o:["1915","1917","1919","1921"], a:1},
+            {t:1, q:"3. ___是在中国举起十月革命旗帜的第一人，是中国最早的马克思主义传播者。", o:["陈独秀","李大钊","胡适","毛泽东"], a:1},
+            {t:1, q:"4. ___，是五四运动的直接导火线。", o:["新文化运动的兴起","北洋军阀的反动统治","民族资产阶级的发展","中国在巴黎和会上的外交失败"], a:3},
+            {t:1, q:"5. ___是近代中国革命史上具有划时代意义的事件，标志着新民主主义革命的伟大开端。", o:["五四运动","中国共产党成立","新文化运动","辛亥革命"], a:0},
+            {t:1, q:"6. ___，在以周恩来为书记的中共中央前敌委员会领导下，在南昌打响了武装反抗国民党反动派的第一枪。", o:["1927年7月1日","1927年8月1日","1927年8月7日","1927年9月9日"], a:1},
+            {t:1, q:"7. ___标志着中国共产党独立领导革命战争、创建人民军队和武装夺取政权的开端，开启了中国革命新纪元。", o:["南昌起义","秋收起义","八七会议","广州起义"], a:0},
+            {t:1, q:"8. 1927年8月7日，中共中央在湖北汉口秘密召开紧急会议（八七会议），会议确定了___的总方针。", o:["推翻北洋军阀的黑暗统治","开辟农村革命根据地","土地革命和武装反抗国民党反动派","开展地下斗争,保存革命力量"], a:2},
+            {t:1, q:"9. ___从组织上确立了党对军队的领导，是建设无产阶级领导的新型人民军队的重要开端。", o:["八七会议","文家市决策","南昌起义","三湾改编"], a:3},
+            {t:1, q:"10. ___是在全国抗战刚刚爆发的历史转折关头召开的一次重要会议，标志着党的全面抗战路线的正式形成。", o:["洛川会议","瓦窑堡会议","古田会议","遵义会议"], a:0},
+            {t:1, q:"11. ___系统阐明了党的抗日持久战战略总方针，是中国共产党领导抗日战争的纲领性文献。", o:["论持久战","抗日游击战争的战略问题","论反对日本帝国主义的策略","为动员一切力量争取抗战胜利而斗争"], a:0},
+            {t:1, q:"12. ___是全民族抗战爆发后中国军队主动对日作战取得的第一个重大胜利，打破了日军“不可战胜”的神话。", o:["台儿庄战役","平型关大捷","百团大战","徐州会战"], a:1},
+            {t:1, q:"13. 党的___是党的生命所系、力量所在，事关党执政地位的巩固和执政使命的完成。", o:["纯洁性","先进性","时代性","纪律性"], a:1},
+            {t:1, q:"14. 解放战争初期，共产党在军事上，实行集中优势兵力、各个歼灭敌人的作战原则和积极防御的方针，以___为主要目标。", o:["保守巩固解放区","夺取城市和地方","歼灭敌人有生力量","争取美国的支持"], a:2},
+            {t:1, q:"15. 1956年9月15日至27日，中国共产党___全国代表大会在___举行。这是党在全国执政后召开的第一次全国代表大会。", o:["第五次、上海","第六次、深圳","第八次、北京","第九次、天津"], a:2},
+            {t:1, q:"16. 党的八大的召开标志着党对中国社会主义建设道路的探索取得初步成果。___的提出则是这一探索的开始。", o:["《论十大关系》","《关于正确处理人民内部矛盾的问题》","《论人民民主专政》","《关于建国以来党的若干历史问题的决议》"], a:0},
+            {t:1, q:"17. 毛泽东在《论十大关系》提出，在共产党和民主党派的关系上实行___的方针。", o:["“长期共存，互相监督”","“肝胆相照、荣辱与共”","“百花齐放、百家争鸣”","“民主协商、科学决策”"], a:0},
+            {t:1, q:"18. 1920年7月，___等人在南昌建立江西第一个革命团体鄱阳湖社，后改名为江西改造社。", o:["赵醒侬","方志敏","袁玉冰","刘和珍"], a:2},
+            {t:1, q:"19. 1978年5月11日，《光明日报》以特约评论员名义公开发表___，提出社会实践不仅是检验真理的标准，而且是唯一的标准。", o:["《实践是检验真理的唯一标准》","《实践是检验真理的标准》","《实践论》","《认识论》"], a:0},
+            {t:1, q:"20. ___底，“文化大革命”中一度中断的高等学校统一招生考试制度得到恢复。", o:["1976年","1977年","1978年","1979年"], a:1},
+            {t:1, q:"21. 1978年，___在北京召开。全会重新确立了党的实事求是的思想路线。", o:["党的十一届二中全会","党的十一届三中全会","党的十一届四中全会","党的十一届五中全会"], a:1},
+            {t:1, q:"22. 党的十一届三中全会决定从1979年1月起，把全党的工作重点和全国人民的注意力转移到___上来。", o:["社会主义现代化建设","提高人民生活水平","整顿党的作风","实现农、轻、重协调发展"], a:0},
+            {t:1, q:"23. ___提出了改革开放的任务。", o:["党的十一届三中全会","党的十一届四中全会","党的十一届五中全会","党的十一届六中全会"], a:0},
+            {t:1, q:"24. 党的十五大提出了___，阐明了建设有中国特色社会主义的经济、政治、文化的基本特征和基本要求。", o:["党在社会主义初级阶段的基本纲领","党在社会主义初级阶段的基本路线","建设有中国特色社会主义理论","中国特色社会主义理论体系"], a:0},
+            {t:1, q:"25. 党的___把邓小平理论同马克思列宁主义、毛泽东思想一起作为党的指导思想写入党章。", o:["十四大","十四届三中全会","十五大","十六大"], a:2},
+            {t:1, q:"26. 党的十五届三中全会提出的坚定不移贯彻土地承包期再延长___的政策。", o:["10年","20年","30年","50年"], a:2},
+            {t:1, q:"27. 1999年11月，第一艘无人实验飞船___的成功发射，标志着我国在载人航天飞行技术上获得了重大突破。", o:["“东方红一号”","“神舟一号”","“长征一号”","“天宫一号”"], a:1},
+            {t:1, q:"28. 中国政府于___申请恢复我国关贸总协定缔约国地位。", o:["1971年10月","1986年7月","1995年1月","2001年11月"], a:1},
+            {t:1, q:"29. 党的___提出全面建设小康社会的奋斗目标。", o:["十六大","十七大","十八大","十九大"], a:0},
+            {t:1, q:"30. ___党章增写了“党徽党旗”一章，对于发挥党徽党旗的感召力具有重要作用。", o:["党的十五大","党的十六大","党的十七大","党的十八大"], a:1},
+            {t:1, q:"31. 2003年10月5日，航天员___乘坐“神舟五号”飞船成功进入太空，我国成为世界上第三个独立掌握载人航天技术的国家。", o:["杨利伟","翟志刚","费俊龙","景海鹏"], a:0},
+            {t:1, q:"32. 2003年6月，世界卫生组织宣布解除对___的旅行警告。我国抗击非典取得阶段性重大胜利。", o:["广州","北京","上海","武汉"], a:1},
+            {t:1, q:"33. 毛泽东率领秋收起义部队创立的___是党领导下的第一个农村革命根据地。", o:["赣南、闽西革命根据地","井冈山革命根据地","湘赣革命根据地","湘鄂赣革命根据地"], a:1},
+            {t:1, q:"34. 2012年11月8日至14日，中国共产党___全国代表大会在北京召开。", o:["第十九次","第十八次","第十七次","第十六次"], a:1},
+            {t:1, q:"35. 2012年11月，习近平指出，要按照___的工作总基调，扎实推动我国经济持续健康发展。", o:["稳中有进","稳中求进","高质量发展","高速发展"], a:1},
+            {t:1, q:"36. ___，国务院正式批准设立中国（上海）自由贸易试验区。", o:["2012年8月","2013年8月","2014年8月","2015年8月"], a:1},
+            {t:1, q:"37. 1922年2月，___建立。这是在江西境内建立的第一个党组织，中国共产党在产业工人中的第一个支部。", o:["中共安源路矿支部","中共浏万边特别支部","中共南昌特别支部","中共九江小组"], a:0},
+            {t:1, q:"38. 2017年10月，___提出我国社会主要矛盾已经转化为人民日益增长的美好生活需要和不平衡不充分的发展之间的矛盾。", o:["党的十六大","党的十七大","党的十八大","党的十九大"], a:3},
+
+            // ============ 判断题 ============
+            {t:2, q:"39. 近代以来，实现中华民族伟大复兴成为全民族最伟大的梦想；争取民族独立、人民解放和实现国家富强、人民幸福，成为中国人民的历史任务。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"40. 新文化运动以资产阶级民主主义为救国方案。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"41. 1929年4月，毛泽东主持制定兴国县《土地法》，将“没收一切土地”改为“没收一切公共土地及地主阶级的土地”。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"42. 九一八事变后，中日民族矛盾逐渐上升为主要矛盾，抗日救亡运动在全国迅速兴起。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"43. 解放战争初期，解放区人民军队没有海军和空军，装备基本上是缴自日、伪军的步兵武器，仅有少量火炮。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"44. 《中国土地法大纲》是一个彻底反封建的土地革命纲领。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"45. 1948年秋，人民解放战争进入夺取全国胜利的决定性阶段，人民解放军取得了打阵地战的经验。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"46. 辽沈战役首先从攻打长春、封闭国民党军于东北开始。", o:["正确(√)","错误(×)"], a:1, exp:"解析：辽沈战役首先从攻打【锦州】、封闭国民党军于东北开始。"},
+            {t:2, q:"47. 新疆是全国大陆最后一个待解放地区。", o:["正确(√)","错误(×)"], a:1, exp:"解析：【西藏】是全国大陆最后一个待解放地区。"},
+            {t:2, q:"48. 1952年底，除一部分少数民族地区外，全国大陆的土地改革基本完成。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"49. 成渝铁路是清末就筹款准备兴修的川汉铁路的一段，新中国成立后仅用两年就建成通车。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"50. 贸易的恢复和发展，是促进城乡物资交流，恢复整个国民经济的重要环节。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"51. 以《论十大关系》和党的八大为标志，党对中国社会主义建设道路的探索有了良好开端。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"52. 1960年10月16日，我国成功爆炸第一颗原子弹，有力打破了大国的核垄断。", o:["正确(√)","错误(×)"], a:1, exp:"解析：【1964年】10月16日，我国成功爆炸第一颗原子弹。"},
+            {t:2, q:"53. 1965年我国在国际上首次人工合成牛胰岛素结晶。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"54. 1964年五六月间，毛泽东从经济建设和国防建设的战略布局考虑，提出四线建设问题。", o:["正确(√)","错误(×)"], a:1, exp:"解析：将全国划分为一、二、【三线】，提出【三线】建设问题。"},
+            {t:2, q:"55. 武汉长江大桥是1968年建成的当时我国自行设计建造的最大的铁路、公路两用桥。", o:["正确(√)","错误(×)"], a:1, exp:"解析：1968年建成的是【南京长江大桥】。"},
+            {t:2, q:"56. 1974年，我国建成大庆至秦皇岛的第一条长距离输油管道。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"57. 1971年4月我国成功发射了第一颗人造地球卫星“东方红一号”。", o:["正确(√)","错误(×)"], a:1, exp:"解析：【1970年】4月我国成功发射了第一颗人造地球卫星。"},
+            {t:2, q:"58. 1972年2月，美国总统尼克松访华，在上海发表《中美联合声明》，标志两国关系正常化进程开始。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"59. 1977年党的第十一次全国代表大会宣告“文化大革命”结束。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"60. 1978年3月，邓小平在全国科学大会上指出，独立自主不是闭关自守，自力更生不是盲目排外。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"61. 党的十四大决定不再设立中央顾问委员会。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"62. 邓小平理论是中国特色社会主义理论体系的开创之作。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"63. 1993年，《中华人民共和国科学技术进步法》颁布实施，这是新中国第一部关于科学技术的法律。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"64. 从2001年8月起，党开始在新的社会阶层中进行发展党员的试点工作。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"65. 2001年7月1日，江泽民在庆祝建党80周年大会讲话中系统阐述了“三个代表”重要思想。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"66. 党的十六大的一个历史性贡献，是把“三个代表”重要思想作为指导思想写入党章。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"67. 2002年11月，党的十六大在阐述全面建设小康社会目标时，提出了实现社会更加和谐的要求。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"68. 十届全国人大三次会议高票通过《反分裂国家法》，标志对台政策进入“以法遏独、以法促统”的新阶段。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"69. 党的十七大提出“加强党的执政能力建设”的命题。", o:["正确(√)","错误(×)"], a:1, exp:"解析：是党的【十六大】提出“加强党的执政能力建设”的命题。"},
+            {t:2, q:"70. 2012年，党的十八大把科学发展观正式确立为党的指导思想。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"71. 党的十八大贯穿始终的主线是坚持和发展中国特色社会主义。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"72. 中国特色社会主义是改革开放以来党的全部理论和实践的主题。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"73. 中国是一个发展中大国，坚持正确的政治发展道路是关系根本、关系全局的重大问题。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"74. 协商民主是中国社会主义民主政治中独特的、独有的、独到的民主形式。", o:["正确(√)","错误(×)"], a:0},
+            {t:2, q:"75. 2014年12月，习近平在江苏调研时首次提出协调推进全面建成小康社会、全面深化改革、全面依法治国、全面从严治党。", o:["正确(√)","错误(×)"], a:0},
+
+            // ============ 多选题 ============
+            {t:3, q:"76. 五四运动突破了知识分子的狭小范围，成为有___参加的全国规模的群众运动。", o:["工人阶级","小资产阶级","资产阶级","农民阶级"], a:[0,1,2]},
+            {t:3, q:"77. 井冈山革命根据地创建时期，毛泽东要求工农革命军担负起___三项任务。", o:["打仗消灭敌人","打土豪筹款子","发展根据地经济","做群众工作"], a:[0,1,3]},
+            {t:3, q:"78. 党对军队的绝对领导，这一根本原则和制度___，是区别于一切旧军队的根本优势。", o:["发端于南昌起义","发端于三湾改编","奠基于三湾改编","定性于八七会议","定型于古田会议"], a:[0,2,4]},
+            {t:3, q:"79. 大革命失败后，共产党引导中国革命走向复兴，这就是___的道路。", o:["农村包围城市","农民土地革命","武装夺取政权","发展工人阶级"], a:[0,2]},
+            {t:3, q:"80. 毛泽东在《论持久战》中科学地预见到抗日战争将经过___三个阶段。", o:["战略等待","战略防御","战略相持","战略反攻"], a:[1,2,3]},
+            {t:3, q:"81. 党的扩大的六届六中全会确定敌后抗战总的战略部署是___。", o:["巩固华北","发展东北","发展华中","发展华南"], a:[0,2]},
+            {t:3, q:"82. 1938年10月日军占领___后，全民族抗日战争由战略防御阶段进入战略相持阶段。", o:["重庆","广州","武汉","南京"], a:[1,2]},
+            {t:3, q:"83. 1943年，国民党顽固派要求___。", o:["解散共产党","取消新四军番号","取消陕甘宁边区","共产党员以个人身份加入国民党"], a:[0,2]},
+            {t:3, q:"84. 1945年8月党中央发表《对目前时局的宣言》，明确提出___的口号。", o:["和平","民主","统一","团结"], a:[0,1,3]},
+            {t:3, q:"85. “双十协定”中，双方在___两个根本问题上未能达成协议。", o:["召开政治协商会议","建设民主共和国","人民军队","解放区政权"], a:[2,3]},
+            {t:3, q:"86. 1945年10月中下旬，解放区部队连续进行___三个战役。", o:["平绥","上党","津浦","平汉（邯郸）"], a:[0,2,3]},
+            {t:3, q:"87. 人民代表大会的根本政治制度、___的基本政治制度的确立，构成了我国社会主义政治制度体系。", o:["中国共产党领导的多党合作和政治协商","民族区域自治","村民代表大会","基层群众自治"], a:[0,1]},
+            {t:3, q:"88. 过渡时期总路线提出后，党对___的社会主义改造，在有步骤地向前推进。", o:["农业","林业","手工业","资本主义工商业"], a:[0,2,3]},
+            {t:3, q:"89. 1954年底，国务院决定采取___的方针，加快改造私营工业的步伐。", o:["统筹兼顾","劳资两利","归口安排","按行业改造"], a:[0,2,3]},
+            {t:3, q:"90. 成功地实现了___曾经设想的对资产阶级的和平赎买。", o:["马克思","恩格斯","列宁","斯大林"], a:[0,2]},
+            {t:3, q:"91. 1956年，社会主义改造基本完成，我国社会主义___都已确立。", o:["政治制度","文化制度","经济制度","社会保障制度"], a:[0,2]},
+            {t:3, q:"92. 党的八大肯定“三个主体，三个补充”思想，即以___三者为主体。", o:["国家经营和集体经营","计划生产","国营经济","国家市场"], a:[0,1,3]},
+            {t:3, q:"93. 根据八大精神，中央决定从整顿作风入手，克服___，正确处理人民内部矛盾。", o:["官僚主义","宗派主义","享乐主义","主观主义"], a:[0,1,3]},
+            {t:3, q:"94. 公有制经济不仅包括___，还包括混合所有制经济中的国有成分和集体成分。", o:["国有经济","民营经济","个体经济","集体经济"], a:[0,3]},
+            {t:3, q:"95. 1978年，党中央作出在___建设大型防护林的战略决策（三北防护林）。", o:["西北","华北","东北","河北"], a:[0,1,2]},
+            {t:3, q:"96. 党的十五大提出，完善___的对外开放格局。", o:["高水平","全方位","多层次","宽领域"], a:[1,2,3]},
+            {t:3, q:"97. 1992年中央民族工作会议要求，巩固和发展___的社会主义民族关系。", o:["平等","团结","互助","和谐"], a:[0,1,2]},
+            {t:3, q:"98. 2001年9月提出要把___紧密结合起来，形成和发展社会主义道德体系。", o:["法制建设与道德建设","法律建设与思想建设","依法治国与以德治国","以法治国与理论建设"], a:[0,2]},
+            {t:3, q:"99. 党的十七大强调，高举中国特色社会主义伟大旗帜，最根本的就是要坚持___。", o:["马克思主义毛泽东思想","中国特色社会主义道路","中国特色社会主义制度","中国特色社会主义理论体系"], a:[1,3]},
+            {t:3, q:"100. 进入新世纪，党中央坚持把___统一起来，坚持走政治发展道路。", o:["党的领导","人民当家作主","政治体制改革","依法治国"], a:[0,1,3]},
+            {t:3, q:"101. 2009年金砖国家会晤，增强了___在全球治理中的代表性和发言权。", o:["新兴市场国家","发达国家","欠发达国家","发展中国家"], a:[0,3]},
+            {t:3, q:"102. 在权力运行机制方面，党中央建立健全了___既相互制约又相互协调的权力结构。", o:["决策权","部署权","执行权","监督权"], a:[0,2,3]},
+            {t:3, q:"103. 在反腐败斗争中，党中央逐步确立了___的工作格局。", o:["加强反腐败国际合作","领导干部廉洁自律","查办违纪违法案件","纠正部门和行业不正之风"], a:[1,2,3]},
+            {t:3, q:"104. 党的十八大强调，___是党和人民90多年奋斗积累的根本成就。", o:["中国特色社会主义道路","中国特色社会主义理论体系","中国特色社会主义制度","中国特色社会主义民主"], a:[0,1,2]},
+            {t:3, q:"105. 习近平在十二届全国人大一次会议进一步阐述和丰富了中国梦的___。", o:["基本内涵","实践途径","实现目标","依靠力量"], a:[0,1,3]},
+            {t:3, q:"106. 中国梦核心内涵是中华民族伟大复兴，本质是___。", o:["国家富强","国家兴旺","民族振兴","人民幸福"], a:[0,2,3]},
+            {t:3, q:"107. 中国梦把___融为一体，体现了中华民族和中国人民的整体利益。", o:["国家的追求","民族的向往","人民的期盼","人民的利益"], a:[0,1,2]},
+            {t:3, q:"108. 习近平进一步阐述了政治发展道路的___，深刻总结了政治制度的优势。", o:["历史逻辑","理论逻辑","探索逻辑","实践逻辑"], a:[0,1,3]}
+        ];
+
+        let currentIndex = 0;
+        let answersState = new Array(db.length).fill(0); // 0未做 1对 -1错
+
+        // 初始化界面
+        function init() {
+            const matrix = document.getElementById('qMatrix');
+            
+            // 生成格子
+            matrix.innerHTML += `<div class="matrix-title">一、单选题 (1-38)</div><div class="grid" id="grid1"></div>`;
+            matrix.innerHTML += `<div class="matrix-title">二、判断题 (39-75)</div><div class="grid" id="grid2"></div>`;
+            matrix.innerHTML += `<div class="matrix-title">三、多选题 (76-108)</div><div class="grid" id="grid3"></div>`;
+
+            let grid1 = document.getElementById('grid1');
+            let grid2 = document.getElementById('grid2');
+            let grid3 = document.getElementById('grid3');
+
+            for (let i = 0; i < db.length; i++) {
+                let div = document.createElement('div');
+                div.className = 'grid-item';
+                div.id = 'gItem' + i;
+                div.innerText = i + 1;
+                div.onclick = () => loadQuestion(i);
+                
+                if (db[i].t === 1) grid1.appendChild(div);
+                else if (db[i].t === 2) grid2.appendChild(div);
+                else grid3.appendChild(div);
+            }
+
+            loadQuestion(0);
+        }
+
+        function loadQuestion(index) {
+            currentIndex = index;
+            const q = db[index];
+            
+            // 状态栏
+            document.querySelectorAll('.grid-item').forEach(el => el.classList.remove('active'));
+            document.getElementById('gItem' + index).classList.add('active');
+            
+            const typeNames = ["单选题", "判断题", "多选题"];
+            document.getElementById('qTypeBadge').innerText = typeNames[q.t - 1];
+            document.getElementById('qIndexText').innerText = `${index + 1} / 108`;
+            
+            // 题目渲染
+            document.getElementById('qText').innerText = q.q;
+            document.getElementById('expBox').classList.remove('show');
+            
+            const oList = document.getElementById('oList');
+            oList.innerHTML = '';
+            
+            const letters = ['A', 'B', 'C', 'D', 'E'];
+            q.o.forEach((optText, i) => {
+                let optDiv = document.createElement('div');
+                optDiv.className = 'option';
+                optDiv.id = 'opt' + i;
+                let prefix = q.t === 2 ? "" : `<span class="option-letter">${letters[i]}.</span>`;
+                optDiv.innerHTML = `${prefix} <span>${optText}</span>`;
+                
+                // 交互绑定
+                optDiv.onclick = () => handleSelect(i, q.t);
+                oList.appendChild(optDiv);
+            });
+
+            // 按钮逻辑
+            document.getElementById('btnSubmit').style.display = (q.t === 3 && answersState[index] === 0) ? 'block' : 'none';
+            document.getElementById('btnPrev').disabled = index === 0;
+            document.getElementById('btnNext').disabled = index === db.length - 1;
+
+            // 如果做过了，直接显示结果
+            if(answersState[index] !== 0) {
+                showResult(q);
+            }
+        }
+
+        // 处理点击选项
+        function handleSelect(optIndex, type) {
+            // 如果已经做过，不再响应
+            if(answersState[currentIndex] !== 0) return;
+
+            if (type === 1 || type === 2) {
+                // 单选/判断：直接出结果
+                checkSingleAnswer(optIndex);
+            } else {
+                // 多选：选中样式切换
+                const optDiv = document.getElementById('opt' + optIndex);
+                optDiv.classList.toggle('selected');
+            }
+        }
+
+        // 检查单选/判断
+        function checkSingleAnswer(selectedIdx) {
+            const q = db[currentIndex];
+            const isCorrect = (selectedIdx === q.a);
+            
+            answersState[currentIndex] = isCorrect ? 1 : -1;
+            updateStats();
+            showResult(q, selectedIdx);
+        }
+
+        // 提交多选
+        function submitMulti() {
+            const q = db[currentIndex];
+            const selectedEls = document.querySelectorAll('.option.selected');
+            if(selectedEls.length === 0) return alert("请至少选择一个选项！");
+
+            let selectedIds = [];
+            selectedEls.forEach(el => {
+                selectedIds.push(parseInt(el.id.replace('opt', '')));
+            });
+            
+            // 对比数组
+            selectedIds.sort();
+            let correctIds = [...q.a].sort();
+            const isCorrect = (JSON.stringify(selectedIds) === JSON.stringify(correctIds));
+
+            answersState[currentIndex] = isCorrect ? 1 : -1;
+            document.getElementById('btnSubmit').style.display = 'none';
+            updateStats();
+            showResult(q, selectedIds);
+        }
+
+        // 展示对错结果
+        function showResult(q, userSelected = null) {
+            const isCorrect = answersState[currentIndex] === 1;
+            const gridItem = document.getElementById('gItem' + currentIndex);
+            gridItem.classList.add(isCorrect ? 'correct' : 'error');
+
+            // 锁定所有选项
+            document.querySelectorAll('.option').forEach(el => {
+                el.classList.add('disabled');
+                el.onclick = null;
+            });
+
+            if (q.t === 1 || q.t === 2) {
+                document.getElementById('opt' + q.a).classList.add('correct-ans');
+                if(!isCorrect && userSelected !== null && userSelected !== q.a) {
+                    document.getElementById('opt' + userSelected).classList.add('wrong-ans');
+                }
+            } else {
+                // 多选展示
+                q.a.forEach(idx => {
+                    document.getElementById('opt' + idx).classList.add('correct-ans');
+                });
+                if(!isCorrect && userSelected !== null) {
+                    userSelected.forEach(idx => {
+                        if(!q.a.includes(idx)) {
+                            document.getElementById('opt' + idx).classList.add('wrong-ans');
+                        }
+                    });
+                }
+            }
+
+            // 显示解析（如果错题且有解析）
+            if(q.exp && !isCorrect) {
+                const expBox = document.getElementById('expBox');
+                expBox.innerText = q.exp;
+                expBox.classList.add('show');
+            }
+        }
+
+        function updateStats() {
+            let done = 0, correct = 0;
+            answersState.forEach(s => {
+                if(s !== 0) done++;
+                if(s === 1) correct++;
+            });
+            document.getElementById('statDone').innerText = `${done}/108`;
+            document.getElementById('statAcc').innerText = done === 0 ? "0%" : Math.round((correct/done)*100) + "%";
+        }
+
+        function goPrev() { if(currentIndex > 0) loadQuestion(currentIndex - 1); }
+        function goNext() { if(currentIndex < db.length - 1) loadQuestion(currentIndex + 1); }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
